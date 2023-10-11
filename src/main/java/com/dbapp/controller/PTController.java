@@ -44,4 +44,25 @@ public class PTController {
         boolean success = esService.startPT(count);
         return success ? "true" : "false";
     }
+
+    @PostMapping("/all/mt/{threadCount}")
+    public String startAllMTPT(@PathVariable int threadCount) {
+        Thread dorisThread = new Thread(() -> dorisService.startMTPT(threadCount), "doris-mt-pt");
+        dorisThread.start();
+        Thread esThread = new Thread(() -> esService.startMTPT(threadCount), "es-mt-pt");
+        esThread.start();
+        return "started";
+    }
+
+    @PostMapping("/doris/mt/{threadCount}")
+    public String startDorisMTPT(@PathVariable int threadCount) {
+        boolean success = dorisService.startMTPT(threadCount);
+        return success ? "true" : "false";
+    }
+
+    @PostMapping("/es/mt/{threadCount}")
+    public String startEsMTPT(@PathVariable int threadCount) {
+        boolean success = esService.startMTPT(threadCount);
+        return success ? "true" : "false";
+    }
 }

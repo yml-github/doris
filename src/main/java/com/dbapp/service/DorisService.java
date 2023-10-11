@@ -18,10 +18,12 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.io.IOException;
-import java.sql.SQLException;
-import java.util.*;
-import java.util.concurrent.Executor;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 /**
  * doris service
@@ -100,11 +102,12 @@ public class DorisService {
             for (QueryTemplate queryTemplate : templates) {
                 log.info("开始执行场景：{}", queryTemplate.getName());
                 String query = queryTemplate.getQuery();
+                List<Future<?>> futures = new ArrayList<>(threadCount);
                 for (int i = 0; i < threadCount; i++) {
                     List<Map<String, Object>> exampleData = exampleDatas.get(i);
-                    Map<String, Object> example = exampleData.get(exampleIndex++);
+                    Map<String, Object> example = exampleData.get(exampleIndex);
                     int finalI = i;
-                    executor.execute(() -> {
+                    Future<?> submit = executor.submit(() -> {
                         String replacedSQL = templateService.replaceParams(query, queryTemplate, example);
                         String sql = null;
                         try {
@@ -114,28 +117,39 @@ public class DorisService {
                         }
                         sql = sql.replace("\"", "'");
                         String completeSQL = completeQuerySQL(sql, queryTemplate.getSize(), queryTemplate.getOrder());
-                        log.info("query: {}, sql: {}", query, completeSQL);
-                        PTResult queryResult = executeSQL(completeSQL, queryTemplate.getName(), null, finalI);
+                        log.info("并发：{}, query: {}, sql: {}", finalI, query, completeSQL);
+                        PTResult queryResult = executeSQL(completeSQL, queryTemplate.getName(), null, finalI + 1);
                         ptResults.add(queryResult);
                         List<AggTemplate> aggTemplates = queryTemplate.getAggTemplates();
                         if (aggTemplates != null) {
                             for (AggTemplate aggTemplate : aggTemplates) {
                                 String aggSQL = completeAggSQL(sql, aggTemplate);
-                                log.info("agg sql: {}", aggSQL);
-                                PTResult aggResult = executeSQL(aggSQL, queryTemplate.getName(), aggTemplate.getKey(), finalI);
+                                log.info("并发: {}, agg sql: {}", finalI, aggSQL);
+                                PTResult aggResult = executeSQL(aggSQL, queryTemplate.getName(), aggTemplate.getKey(), finalI + 1);
                                 ptResults.add(aggResult);
                             }
                         }
                     });
+                    futures.add(submit);
+                }
+
+                exampleIndex++;
+
+                for (Future<?> future : futures) {
+                    try {
+                        future.get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
 
-            log.info("doris查询测试结束，结果：{}", ptResults);
+            log.info("doris并发查询测试结束，结果：{}", ptResults);
 
             recordService.record(ptResults, "doris");
             recordService.recordExcel(ptResults, "doris", threadCount);
-            } catch (IOException throwables) {
-            throwables.printStackTrace();
+        } catch (IOException e) {
+            log.error("Doris查询执行异常", e);
         }
 
         return true;

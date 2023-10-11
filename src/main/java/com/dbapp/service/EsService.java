@@ -32,12 +32,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.io.IOException;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 /**
  * es查询服务
@@ -66,6 +70,91 @@ public class EsService {
 
     @Value("${example.data.type}")
     private String exampleDataType;
+
+    @Resource(name = "es")
+    private ExecutorService executorService;
+
+    public boolean startMTPT(int threadCount) {
+        log.info("开始执行ES并发查询测试，并发数：{}", threadCount);
+        RestHighLevelClient restClient = esClient.getRestClient();
+
+        QueryTemplates queryTemplates = templateService.getQueryTemplates();
+        List<QueryTemplate> templates = queryTemplates.getTemplates();
+        List<PTResult> ptResults = new ArrayList<>();
+
+        try {
+            List<List<Map<String, Object>>> exampleDatas = new ArrayList<>();
+            for (int i = 1; i <= threadCount; i++) {
+                List<Map<String, Object>> exampleData;
+                if ("local".equals(exampleDataType)) {
+                    exampleData = localDataService.getESLocalDataExample();
+                } else if ("random".equals(exampleDataType)) {
+                    exampleData = getExampleData();
+                } else {
+                    exampleData = localDataService.getDorisCachedExampleData(i);
+                }
+                exampleDatas.add(exampleData);
+            }
+
+
+            int exampleIndex = 0;
+
+            for (QueryTemplate queryTemplate : templates) {
+                log.info("开始执行场景：{}", queryTemplate.getName());
+                String query = queryTemplate.getQuery();
+                List<Future<?>> futures = new ArrayList<>(threadCount);
+                for (int i = 0; i < threadCount; i++) {
+                    List<Map<String, Object>> exampleData = exampleDatas.get(i);
+                    Map<String, Object> example = exampleData.get(exampleIndex);
+                    int finalI = i;
+                    Future<?> submit = executorService.submit(() -> {
+                        String replaceQuery = templateService.replaceParams(query, queryTemplate, example);
+                        String esQuery = null;
+                        try {
+                            esQuery = transEsQuery(replaceQuery);
+                        } catch (BaasELException e) {
+                            e.printStackTrace();
+                        }
+                        log.info("并发：{}, aiql转esQuery: {}", finalI, esQuery);
+                        SearchRequest searchRequest = buildRequest(esConfig.getStartTime(), esConfig.getEndTime(), esQuery, queryTemplate.getSize());
+                        log.info("并发：{}, query: {}, dsl: {}", finalI, replaceQuery, searchRequest);
+                        PTResult queryResult = executeEsQuery(restClient, searchRequest, replaceQuery, queryTemplate.getName(), null, finalI);
+                        ptResults.add(queryResult);
+                        List<AggTemplate> aggTemplates = queryTemplate.getAggTemplates();
+                        if (aggTemplates != null) {
+                            for (AggTemplate aggTemplate : aggTemplates) {
+                                SearchRequest aggRequest = buildRequest(null, null, esQuery, 0);
+                                completeAggDsl(aggRequest, aggTemplate);
+                                log.info("并发：{}, 聚合场景：{}, agg dsl: {}", finalI, aggTemplate.getKey(), aggRequest);
+                                PTResult aggResult = executeEsQuery(restClient, aggRequest, replaceQuery, queryTemplate.getName(), aggTemplate.getKey(), finalI);
+                                ptResults.add(aggResult);
+                            }
+                        }
+                    });
+                    futures.add(submit);
+                }
+
+                exampleIndex++;
+
+                for (Future<?> future : futures) {
+                    try {
+                        future.get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+
+            log.info("es查询测试结束，结果：{}", ptResults);
+
+            recordService.record(ptResults, "es");
+            recordService.recordExcel(ptResults, "es", threadCount);
+        } catch (Exception e) {
+            log.error("es查询执行失败", e);
+            return false;
+        }
+        return true;
+    }
 
     public boolean startPT(int count) {
         log.info("开始执行ES查询测试，总轮询次数：{}", count);
@@ -140,7 +229,7 @@ public class EsService {
         }
     }
 
-    private PTResult executeEsQuery(RestHighLevelClient client, SearchRequest request, String query, String name, String aggKey, int currentCount) throws IOException {
+    private PTResult executeEsQuery(RestHighLevelClient client, SearchRequest request, String query, String name, String aggKey, int currentCount) {
         long start = System.currentTimeMillis();
         log.info("执行开始时间：{}", FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss").format(start));
 
@@ -180,29 +269,34 @@ public class EsService {
         return transQuery.getJSONObject("query").toJSONString();
     }
 
-    private SearchRequest buildRequest(String startTime, String endTime, String esQuery, int size) throws ParseException {
+    private SearchRequest buildRequest(String startTime, String endTime, String esQuery, int size) {
         SearchRequest searchRequest = new SearchRequest(esConfig.getIndex());
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         String start = null;
         String end = null;
-        if (StringUtils.isNotBlank(startTime)) {
-            start = TimeUtil.getCollectorReceiptTimeZ(startTime, 8);
-        }
-        if (StringUtils.isNotBlank(endTime)) {
-            end = TimeUtil.getCollectorReceiptTimeZ(endTime, 8);
-        }
-        BoolQueryBuilder queryBuilder = QueryBuilders.boolQuery().filter(QueryBuilders.rangeQuery("@timestamp").from(start).to(end));
-        if (StringUtils.isNotBlank(esQuery)) {
-            queryBuilder.filter(QueryBuilders.wrapperQuery(esQuery));
-        }
-        searchSourceBuilder.trackTotalHits(true).size(size)
-                .query(queryBuilder);
-        if (size > 0) {
-            searchSourceBuilder.sort("collectorReceiptTime", SortOrder.DESC);
-        }
+        try {
+            if (StringUtils.isNotBlank(startTime)) {
+                start = TimeUtil.getCollectorReceiptTimeZ(startTime, 8);
+            }
+            if (StringUtils.isNotBlank(endTime)) {
+                end = TimeUtil.getCollectorReceiptTimeZ(endTime, 8);
+            }
+            BoolQueryBuilder queryBuilder = QueryBuilders.boolQuery().filter(QueryBuilders.rangeQuery("@timestamp").from(start).to(end));
+            if (StringUtils.isNotBlank(esQuery)) {
+                queryBuilder.filter(QueryBuilders.wrapperQuery(esQuery));
+            }
+            searchSourceBuilder.trackTotalHits(true).size(size)
+                    .query(queryBuilder);
+            if (size > 0) {
+                searchSourceBuilder.sort("collectorReceiptTime", SortOrder.DESC);
+            }
 
-        searchRequest.source(searchSourceBuilder);
-        return searchRequest;
+            searchRequest.source(searchSourceBuilder);
+            return searchRequest;
+        } catch (ParseException e) {
+            log.error("", e);
+        }
+        return null;
     }
 
 
