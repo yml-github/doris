@@ -1,0 +1,17 @@
+aggs:
+  - name: 数据量count
+    key: Count
+    prefix: select count(1)
+    suffix:
+
+  - name: 时序图统计
+    key: DateHistogram
+    field: collectorReceiptTime
+    prefix: select MINUTE_FLOOR(collectorReceiptTime) as minuteTime, count(1) as count
+    suffix: GROUP BY minuteTime ORDER BY minuteTime asc
+
+  - name: TopN统计
+    key: TopN
+    field: srcAddress
+    prefix: select srcAddress, count(1) as count
+    suffix: GROUP BY srcAddress ORDER BY count desc limit 500

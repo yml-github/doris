@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration status="INFO" monitorInterval="60">
+    <Properties>
+        <Property name="log.path">logs</Property>
+        <Property name="log.layout">[%d{yyyy-MM-dd HH:mm:ss}][%-5level][%t][%c{1.}] - %m%n</Property>
+    </Properties>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${log.layout}" disableAnsi="false" noConsoleNoAnsi="false"/>
+        </Console>
+
+        <RollingFile name="RollingFile" fileName="${log.path}/main.log" filePattern="${log.path}/main.%i.log">
+            <ThresholdFilter level="INFO" onMatch="ACCEPT" onMismatch="DENY"/>
+            <PatternLayout pattern="${log.layout}"/>
+            <SizeBasedTriggeringPolicy size="64MB"/>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <appender-ref ref="Console"/>
+            <appender-ref ref="RollingFile"/>
+        </Root>
+    </Loggers>
+</configuration>
