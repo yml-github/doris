@@ -20,6 +20,8 @@ import javax.annotation.Resource;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 
 /**
  * doris service
@@ -60,6 +62,84 @@ public class DorisService {
 
     @Value("${example.data.type}")
     private String exampleDataType;
+
+    @Resource(name = "doris")
+    private ExecutorService executor;
+
+    public boolean startMTPT(int threadCount) {
+        log.info("开始执行Doris并发查询测试，并发数：{}", threadCount);
+        JSONObject dic = DicLoader.getDic();
+
+        jdbcTemplate.setQueryTimeout(300000);
+
+        try {
+            List<PTResult> ptResults = new ArrayList<>();
+            QueryTemplates queryTemplates = templateService.getQueryTemplates();
+            List<QueryTemplate> templates = queryTemplates.getTemplates();
+
+            List<List<Map<String, Object>>> exampleDatas = new ArrayList<>();
+            for (int i = 1; i <= threadCount; i++) {
+                List<Map<String, Object>> exampleData;
+                if ("local".equals(exampleDataType)) {
+                    exampleData = localDataService.getDorisLocalDataExample();
+                } else if ("random".equals(exampleDataType) || "follow".equals(exampleDataType)) {
+                    exampleData = getExampleData(i, threadCount);
+                } else {
+                    if (localDataService.getDorisExampleDataList().size() < i) {
+                        exampleData = getExampleData(i, threadCount);
+                    } else {
+                        log.info("doris复用第: {}轮数据", threadCount);
+                        exampleData = localDataService.getDorisCachedExampleData(i);
+                    }
+                }
+                exampleDatas.add(exampleData);
+            }
+
+            int exampleIndex = 0;
+
+            for (QueryTemplate queryTemplate : templates) {
+                log.info("开始执行场景：{}", queryTemplate.getName());
+                String query = queryTemplate.getQuery();
+                for (int i = 0; i < threadCount; i++) {
+                    List<Map<String, Object>> exampleData = exampleDatas.get(i);
+                    Map<String, Object> example = exampleData.get(exampleIndex++);
+                    int finalI = i;
+                    executor.execute(() -> {
+                        String replacedSQL = templateService.replaceParams(query, queryTemplate, example);
+                        String sql = null;
+                        try {
+                            sql = TreeUtil.transMysqlQuery(replacedSQL, dic);
+                        } catch (BaasMonitorException e) {
+                            e.printStackTrace();
+                        }
+                        sql = sql.replace("\"", "'");
+                        String completeSQL = completeQuerySQL(sql, queryTemplate.getSize(), queryTemplate.getOrder());
+                        log.info("query: {}, sql: {}", query, completeSQL);
+                        PTResult queryResult = executeSQL(completeSQL, queryTemplate.getName(), null, finalI);
+                        ptResults.add(queryResult);
+                        List<AggTemplate> aggTemplates = queryTemplate.getAggTemplates();
+                        if (aggTemplates != null) {
+                            for (AggTemplate aggTemplate : aggTemplates) {
+                                String aggSQL = completeAggSQL(sql, aggTemplate);
+                                log.info("agg sql: {}", aggSQL);
+                                PTResult aggResult = executeSQL(aggSQL, queryTemplate.getName(), aggTemplate.getKey(), finalI);
+                                ptResults.add(aggResult);
+                            }
+                        }
+                    });
+                }
+            }
+
+            log.info("doris查询测试结束，结果：{}", ptResults);
+
+            recordService.record(ptResults, "doris");
+            recordService.recordExcel(ptResults, "doris", threadCount);
+            } catch (IOException throwables) {
+            throwables.printStackTrace();
+        }
+
+        return true;
+    }
 
     public boolean startPT(int count) {
         log.info("开始执行Doris查询测试，总轮询次数：{}", count);
@@ -115,14 +195,14 @@ public class DorisService {
 
             recordService.record(ptResults, "doris");
             recordService.recordExcel(ptResults, "doris", count);
-        } catch (SQLException | BaasMonitorException | IOException e) {
+        } catch (BaasMonitorException | IOException e) {
             log.error("Doris查询执行异常", e);
             return false;
         }
         return true;
     }
 
-    private PTResult executeSQL(String sql, String name, String aggKey, int currentCount) throws SQLException {
+    private PTResult executeSQL(String sql, String name, String aggKey, int currentCount) {
         long start = System.currentTimeMillis();
         log.info("执行开始时间：{}", FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss").format(start));
 

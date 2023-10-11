@@ -24,7 +24,6 @@ public class PTController {
     @Autowired
     private EsService esService;
 
-
     @PostMapping("/all/{count}")
     public String startAllPT(@PathVariable int count) {
         Thread dorisThread = new Thread(() -> dorisService.startPT(count), "doris-pt");
