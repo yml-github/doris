@@ -108,7 +108,7 @@ public class EsService {
                     Map<String, Object> example = exampleData.get(exampleIndex);
                     int finalI = i;
                     Future<?> submit = executorService.submit(() -> {
-                        String replaceQuery = templateService.replaceParams(query, queryTemplate, example);
+                        String replaceQuery = templateService.replaceParams(query, queryTemplate, example, finalI);
                         String esQuery = null;
                         try {
                             esQuery = transEsQuery(replaceQuery);
@@ -179,7 +179,7 @@ public class EsService {
                 for (QueryTemplate queryTemplate : templates) {
                     log.info("开始第{}次执行场景：{}", i, queryTemplate.getName());
                     String query = queryTemplate.getQuery();
-                    String replaceQuery = templateService.replaceParams(query, queryTemplate, exampleData.get(exampleIndex++));
+                    String replaceQuery = templateService.replaceParams(query, queryTemplate, exampleData.get(exampleIndex++), i);
                     String esQuery = transEsQuery(replaceQuery);
                     log.info("aiql转esQuery: {}", esQuery);
                     SearchRequest searchRequest = buildRequest(esConfig.getStartTime(), esConfig.getEndTime(), esQuery, queryTemplate.getSize());

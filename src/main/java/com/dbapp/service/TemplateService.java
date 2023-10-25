@@ -63,7 +63,7 @@ public class TemplateService {
         return queryTemplates;
     }
 
-    public String replaceParams(String sql, QueryTemplate queryTemplate, Map<String, Object> data) {
+    public String replaceParams(String sql, QueryTemplate queryTemplate, Map<String, Object> data, int order) {
         String pattern = "\\$\\{(\\w+)}";
 
         Pattern regexPattern = Pattern.compile(pattern);
@@ -91,6 +91,14 @@ public class TemplateService {
                     int index = random.nextInt(params.size());
                     query = query.replaceFirst(pattern, String.valueOf(params.get(index)));
                     params.remove(index);
+                }
+                break;
+            case "order":
+                List<Object> orderParams = new ArrayList<>(queryTemplate.getParams());
+                int i = order;
+                while (matcher.find()) {
+                    query = query.replaceFirst(pattern, String.valueOf(orderParams.get(i % orderParams.size())));
+                    i++;
                 }
                 break;
             default:

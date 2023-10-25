@@ -108,7 +108,7 @@ public class DorisService {
                     Map<String, Object> example = exampleData.get(exampleIndex);
                     int finalI = i;
                     Future<?> submit = executor.submit(() -> {
-                        String replacedSQL = templateService.replaceParams(query, queryTemplate, example);
+                        String replacedSQL = templateService.replaceParams(query, queryTemplate, example, finalI);
                         String sql = null;
                         try {
                             sql = TreeUtil.transMysqlQuery(replacedSQL, dic);
@@ -186,7 +186,7 @@ public class DorisService {
                 for (QueryTemplate queryTemplate : templates) {
                     log.info("开始第：{}次执行场景：{}", i, queryTemplate.getName());
                     String query = queryTemplate.getQuery();
-                    String replacedSQL = templateService.replaceParams(query, queryTemplate, exampleData.get(exampleIndex++));
+                    String replacedSQL = templateService.replaceParams(query, queryTemplate, exampleData.get(exampleIndex++), i);
                     String sql = TreeUtil.transMysqlQuery(replacedSQL, dic);
                     sql = sql.replace("\"", "'");
                     String completeSQL = completeQuerySQL(sql, queryTemplate.getSize(), queryTemplate.getOrder());
@@ -260,6 +260,9 @@ public class DorisService {
     }
 
     private String completeAggSQL(String whereSQL, AggTemplate aggTemplate) {
+        if (aggTemplate.getKey().equals("DateHistogram")) {
+            return completeDateHistogramSQL(whereSQL, aggTemplate);
+        }
         StringBuilder sql = new StringBuilder();
         whereSQL = "(collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\") AND (" + whereSQL + ")";
         sql.append(aggTemplate.getPrefix()).append(" from ").append(table)
@@ -270,11 +273,24 @@ public class DorisService {
         return sql.toString();
     }
 
+    private String completeDateHistogramSQL(String whereSQL, AggTemplate aggTemplate) {
+        StringBuilder sql = new StringBuilder();
+        whereSQL = "(collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\") AND (" + whereSQL + ")";
+        sql.append("SELECT MINUTE_FLOOR(table_per_time.minuteTime, 5) as minuteTime, sum(count) FROM (")
+                .append(aggTemplate.getPrefix()).append(" from ").append(table)
+                .append(" PARTITION(").append(partition).append(") where ").append(whereSQL);
+        if (StringUtils.isNotBlank(aggTemplate.getSuffix())) {
+            sql.append(" ").append(aggTemplate.getSuffix());
+        }
+        sql.append(" ) as table_per_time GROUP BY minuteTime ORDER BY minuteTime");
+        return sql.toString();
+    }
+
     private List<Map<String, Object>> getExampleData(int currentCount, int totalCount) throws IOException {
         if ("local-file".equals(exampleDataType) && localDataService.getLocalFileDataList().size() >= totalCount) {
             log.info("使用本地文件样例数据");
             localDataService.setDorisExampleDataList(localDataService.getLocalFileDataList());
-            return localDataService.getLocalFileDataList().get(currentCount);
+            return localDataService.getLocalFileDataList().get(currentCount - 1);
         } else {
             log.warn("本地文件总轮数小于需要的轮数，不使用");
         }
