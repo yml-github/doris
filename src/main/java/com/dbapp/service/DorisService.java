@@ -1,6 +1,7 @@
 package com.dbapp.service;
 
 import com.alibaba.fastjson.JSONObject;
+import com.dbapp.config.PTConstant;
 import com.dbapp.dic.DicLoader;
 import com.dbapp.exception.BaasMonitorException;
 import com.dbapp.result.PTResult;
@@ -53,6 +54,9 @@ public class DorisService {
     @Value("${doris.select.fields}")
     private String selectFields;
 
+    @Value("${doris.update.table}")
+    private String updateTable;
+
     @Autowired
     private TemplateService templateService;
 
@@ -69,6 +73,10 @@ public class DorisService {
     private ExecutorService executor;
 
     public boolean startMTPT(int threadCount) {
+        return startMTPT(threadCount, PTConstant.QUERY);
+    }
+
+    public boolean startMTPT(int threadCount, PTConstant ptConstant) {
         log.info("开始执行Doris并发查询测试，并发数：{}", threadCount);
         JSONObject dic = DicLoader.getDic();
 
@@ -85,10 +93,10 @@ public class DorisService {
                 if ("local".equals(exampleDataType)) {
                     exampleData = localDataService.getDorisLocalDataExample();
                 } else if ("random".equals(exampleDataType) || "follow".equals(exampleDataType)) {
-                    exampleData = getExampleData(i, threadCount);
+                    exampleData = getExampleData(i, threadCount, ptConstant);
                 } else {
                     if (localDataService.getDorisExampleDataList().size() < i) {
-                        exampleData = getExampleData(i, threadCount);
+                        exampleData = getExampleData(i, threadCount, ptConstant);
                     } else {
                         log.info("doris复用第: {}轮数据", threadCount);
                         exampleData = localDataService.getDorisCachedExampleData(i);
@@ -108,7 +116,7 @@ public class DorisService {
                     Map<String, Object> example = exampleData.get(exampleIndex);
                     int finalI = i;
                     Future<?> submit = executor.submit(() -> {
-                        String replacedSQL = templateService.replaceParams(query, queryTemplate, example);
+                        String replacedSQL = templateService.replaceParams(query, queryTemplate, example, finalI);
                         String sql = null;
                         try {
                             sql = TreeUtil.transMysqlQuery(replacedSQL, dic);
@@ -116,7 +124,7 @@ public class DorisService {
                             e.printStackTrace();
                         }
                         sql = sql.replace("\"", "'");
-                        String completeSQL = completeQuerySQL(sql, queryTemplate.getSize(), queryTemplate.getOrder());
+                        String completeSQL = completeSQL(sql, queryTemplate.getSize(), queryTemplate.getOrder(), ptConstant);
                         log.info("并发：{}, query: {}, sql: {}", finalI, query, completeSQL);
                         PTResult queryResult = executeSQL(completeSQL, queryTemplate.getName(), null, finalI + 1);
                         ptResults.add(queryResult);
@@ -156,7 +164,12 @@ public class DorisService {
     }
 
     public boolean startPT(int count) {
-        log.info("开始执行Doris查询测试，总轮询次数：{}", count);
+        return startPT(count, PTConstant.QUERY);
+    }
+
+
+    public boolean startPT(int count, PTConstant ptConstant) {
+        log.info("开始执行Doris {}测试，总轮询次数：{}", ptConstant, count);
         JSONObject dic = DicLoader.getDic();
 
         jdbcTemplate.setQueryTimeout(300000);
@@ -171,10 +184,10 @@ public class DorisService {
                 if ("local".equals(exampleDataType)) {
                     exampleData = localDataService.getDorisLocalDataExample();
                 } else if ("random".equals(exampleDataType) || "follow".equals(exampleDataType)) {
-                    exampleData = getExampleData(i, count);
+                    exampleData = getExampleData(i, count, ptConstant);
                 } else {
                     if (localDataService.getDorisExampleDataList().size() < i) {
-                        exampleData = getExampleData(i, count);
+                        exampleData = getExampleData(i, count, ptConstant);
                     } else {
                         log.info("doris复用第: {}轮数据", count);
                         exampleData = localDataService.getDorisCachedExampleData(i);
@@ -186,15 +199,15 @@ public class DorisService {
                 for (QueryTemplate queryTemplate : templates) {
                     log.info("开始第：{}次执行场景：{}", i, queryTemplate.getName());
                     String query = queryTemplate.getQuery();
-                    String replacedSQL = templateService.replaceParams(query, queryTemplate, exampleData.get(exampleIndex++));
+                    String replacedSQL = templateService.replaceParams(query, queryTemplate, exampleData.get(exampleIndex++), i);
                     String sql = TreeUtil.transMysqlQuery(replacedSQL, dic);
                     sql = sql.replace("\"", "'");
-                    String completeSQL = completeQuerySQL(sql, queryTemplate.getSize(), queryTemplate.getOrder());
+                    String completeSQL = completeSQL(sql, queryTemplate.getSize(), queryTemplate.getOrder(), ptConstant);
                     log.info("query: {}, sql: {}", query, completeSQL);
                     PTResult queryResult = executeSQL(completeSQL, queryTemplate.getName(), null, i);
                     ptResults.add(queryResult);
                     List<AggTemplate> aggTemplates = queryTemplate.getAggTemplates();
-                    if (aggTemplates != null) {
+                    if (aggTemplates != null && ptConstant == PTConstant.QUERY) {
                         for (AggTemplate aggTemplate : aggTemplates) {
                             String aggSQL = completeAggSQL(sql, aggTemplate);
                             log.info("agg sql: {}", aggSQL);
@@ -248,9 +261,27 @@ public class DorisService {
         return ptResult;
     }
 
-    private String completeQuerySQL(String whereSQL, int size, String order) {
+    private String completeSQL(String whereSQL, int size, String order, PTConstant ptConstant) {
         StringBuilder sql = new StringBuilder();
-        whereSQL = "(collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\") AND (" + whereSQL + ")";
+        String timeField = ptConstant == PTConstant.QUERY ? "collectorReceiptTime" : "endTime";
+        whereSQL = "(" + timeField + " >= \"" + startTime + "\" AND " + timeField + " <= \"" + endTime + "\") AND (" + whereSQL + ")";
+
+        switch (ptConstant) {
+            case QUERY:
+                sql.append("select ").append(selectFields).append(" from ").append(table).append(" PARTITION(").append(partition).append(") where ").append(whereSQL);
+                if (StringUtils.isNotBlank(order)) {
+                    sql.append(" ORDER BY ").append(order);
+                }
+                sql.append(" limit ").append(size);
+                return sql.toString();
+            case UPDATE:
+                sql.append("update ").append(table).append( "PARTITION(").append(partition).append(") set status = '未处置' where ").append(whereSQL);
+                return sql.toString();
+            case JOIN:
+                String joinSql = templateService.getDorisJoinTemplateSql();
+                return joinSql.replace("${whereCondition}", whereSQL);
+        }
+
         sql.append("select ").append(selectFields).append(" from ").append(table).append(" PARTITION(").append(partition).append(") where ").append(whereSQL);
         if (StringUtils.isNotBlank(order)) {
             sql.append(" ORDER BY ").append(order);
@@ -260,6 +291,9 @@ public class DorisService {
     }
 
     private String completeAggSQL(String whereSQL, AggTemplate aggTemplate) {
+        if (aggTemplate.getKey().equals("DateHistogram")) {
+            return completeDateHistogramSQL(whereSQL, aggTemplate);
+        }
         StringBuilder sql = new StringBuilder();
         whereSQL = "(collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\") AND (" + whereSQL + ")";
         sql.append(aggTemplate.getPrefix()).append(" from ").append(table)
@@ -270,26 +304,48 @@ public class DorisService {
         return sql.toString();
     }
 
-    private List<Map<String, Object>> getExampleData(int currentCount, int totalCount) throws IOException {
+    private String completeDateHistogramSQL(String whereSQL, AggTemplate aggTemplate) {
+        StringBuilder sql = new StringBuilder();
+        whereSQL = "(collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\") AND (" + whereSQL + ")";
+        sql.append("SELECT MINUTE_FLOOR(table_per_time.minuteTime, 5) as minuteTime, sum(count) FROM (")
+                .append(aggTemplate.getPrefix()).append(" from ").append(table)
+                .append(" PARTITION(").append(partition).append(") where ").append(whereSQL);
+        if (StringUtils.isNotBlank(aggTemplate.getSuffix())) {
+            sql.append(" ").append(aggTemplate.getSuffix());
+        }
+        sql.append(" ) as table_per_time GROUP BY minuteTime ORDER BY minuteTime");
+        return sql.toString();
+    }
+
+    private List<Map<String, Object>> getExampleData(int currentCount, int totalCount, PTConstant ptConstant) throws IOException {
         if ("local-file".equals(exampleDataType) && localDataService.getLocalFileDataList().size() >= totalCount) {
             log.info("使用本地文件样例数据");
             localDataService.setDorisExampleDataList(localDataService.getLocalFileDataList());
-            return localDataService.getLocalFileDataList().get(currentCount);
+            return localDataService.getLocalFileDataList().get(currentCount - 1);
         } else {
             log.warn("本地文件总轮数小于需要的轮数，不使用");
         }
-        String totalSQL = "select count(1) as count from " + table + " PARTITION(" + partition + ")" +
-                " where " + "collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\"";
-        log.info("Doris获取数据总量：{}", totalSQL);
-        List<Map<String, Object>> totalResults = jdbcTemplate.queryForList(totalSQL);
-        long total = Long.parseLong(String.valueOf(totalResults.get(0).get("count")));
-        String randomSQL = "select " + selectFields + " from " + table + " PARTITION(" + partition + ") " +
-                " where " + "collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\" LIMIT 50";
-        log.info("Doris随机取数据SQL：{}", randomSQL);
-        log.info("Doris展示列：{}", selectFields);
-        List<Map<String, Object>> examples = jdbcTemplate.queryForList(randomSQL);
 
-        log.info("总数据量：{}, 获取样例数据：{}条", total, examples.size());
+        List<Map<String, Object>> examples;
+        if (ptConstant == PTConstant.QUERY) {
+            String totalSQL = "select count(1) as count from " + table + " PARTITION(" + partition + ")" +
+                    " where " + "collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\"";
+            log.info("Doris获取数据总量：{}", totalSQL);
+            List<Map<String, Object>> totalResults = jdbcTemplate.queryForList(totalSQL);
+            long total = Long.parseLong(String.valueOf(totalResults.get(0).get("count")));
+            String randomSQL = "select " + selectFields + " from " + table + " PARTITION(" + partition + ") " +
+                    " where " + "collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\" LIMIT 50";
+            log.info("Doris随机取数据SQL：{}", randomSQL);
+            log.info("Doris展示列：{}", selectFields);
+            examples = jdbcTemplate.queryForList(randomSQL);
+            log.info("总数据量：{}, 获取样例数据：{}条", total, examples.size());
+        } else {
+            String randomSQL = "select " + selectFields + " from " + updateTable + " LIMIT 50";
+            log.info("Doris随机取数据SQL：{}", randomSQL);
+            log.info("Doris展示列：{}", selectFields);
+            examples = jdbcTemplate.queryForList(randomSQL);
+            log.info("Table: {}, 获取样例数据：{}条", updateTable, examples.size());
+        }
 
         localDataService.recordDorisExampleData(examples, currentCount, totalCount);
 

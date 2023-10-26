@@ -1,5 +1,6 @@
 package com.dbapp.controller;
 
+import com.dbapp.service.CkService;
 import com.dbapp.service.DorisService;
 import com.dbapp.service.EsService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,11 +25,23 @@ public class PTController {
     @Autowired
     private EsService esService;
 
+    @Autowired
+    private CkService ckService;
+
     @PostMapping("/all/{count}")
     public String startAllPT(@PathVariable int count) {
         Thread dorisThread = new Thread(() -> dorisService.startPT(count), "doris-pt");
         dorisThread.start();
         Thread esThread = new Thread(() -> esService.startPT(count), "es-pt");
+        esThread.start();
+        return "started";
+    }
+
+    @PostMapping("/all/join/{count}")
+    public String startAllJoinPT(@PathVariable int count) {
+        Thread dorisThread = new Thread(() -> dorisService.startPT(count), "doris-pt");
+        dorisThread.start();
+        Thread esThread = new Thread(() -> ckService.startPT(count), "ck-pt");
         esThread.start();
         return "started";
     }
@@ -42,6 +55,12 @@ public class PTController {
     @PostMapping("/es/{count}")
     public String startEsPT(@PathVariable int count) {
         boolean success = esService.startPT(count);
+        return success ? "true" : "false";
+    }
+
+    @PostMapping("/ck/{count}")
+    public String startCkPT(@PathVariable int count) {
+        boolean success = ckService.startPT(count);
         return success ? "true" : "false";
     }
 

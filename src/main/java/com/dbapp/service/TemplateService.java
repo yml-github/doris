@@ -1,16 +1,12 @@
 package com.dbapp.service;
 
-import com.dbapp.templates.AggTemplate;
-import com.dbapp.templates.AggTemplates;
-import com.dbapp.templates.QueryTemplate;
-import com.dbapp.templates.QueryTemplates;
+import com.dbapp.templates.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.yaml.snakeyaml.Yaml;
 
 import javax.annotation.PostConstruct;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.*;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,8 +23,12 @@ import java.util.stream.Collectors;
 public class TemplateService {
     private static final String AGG_TEMPLATE_FILE = "aggs.yml";
     private static final String QUERY_TEMPLATE_FILE = "query-template.yml";
+    private static final String DORIS_JOIN_TEMPLATE_SQL = "doris-join-template.sql";
+    private static final String CK_JOIN_TEMPLATE_SQL = "ck-join-template.sql";
 
     private QueryTemplates queryTemplates;
+    private String dorisJoinTemplate;
+    private String ckJoinTemplate;
 
     @PostConstruct
     public void init() {
@@ -53,7 +53,33 @@ public class TemplateService {
                 }
             });
 
+            File file = new File(path + DORIS_JOIN_TEMPLATE_SQL);
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                StringBuilder joinTemplate = new StringBuilder();
+                while ((line = reader.readLine()) != null) {
+                    joinTemplate.append(line);
+                }
+                dorisJoinTemplate = joinTemplate.toString();
+            } catch (IOException e) {
+                log.error("doris join模板加载异常", e);
+            }
+
+            File ckSQLFile = new File(path + CK_JOIN_TEMPLATE_SQL);
+            try (BufferedReader reader = new BufferedReader(new FileReader(ckSQLFile))) {
+                String line;
+                StringBuilder joinTemplate = new StringBuilder();
+                while ((line = reader.readLine()) != null) {
+                    joinTemplate.append(line);
+                }
+                ckJoinTemplate = joinTemplate.toString();
+            } catch (IOException e) {
+                log.error("doris join模板加载异常", e);
+            }
+
             log.info("模板载入完成，查询模板：{}，聚合模板：{}", queryTemplates.getTemplates().size(), aggs.size());
+            log.info("doris join模板：{}", dorisJoinTemplate);
+            log.info("ck join模板：{}", ckJoinTemplate);
         } catch (FileNotFoundException e) {
             log.error("模板载入异常", e);
         }
@@ -63,7 +89,15 @@ public class TemplateService {
         return queryTemplates;
     }
 
-    public String replaceParams(String sql, QueryTemplate queryTemplate, Map<String, Object> data) {
+    public String getDorisJoinTemplateSql() {
+        return dorisJoinTemplate;
+    }
+
+    public String getCkJoinTemplateSql() {
+        return ckJoinTemplate;
+    }
+
+    public String replaceParams(String sql, QueryTemplate queryTemplate, Map<String, Object> data, int order) {
         String pattern = "\\$\\{(\\w+)}";
 
         Pattern regexPattern = Pattern.compile(pattern);
@@ -91,6 +125,14 @@ public class TemplateService {
                     int index = random.nextInt(params.size());
                     query = query.replaceFirst(pattern, String.valueOf(params.get(index)));
                     params.remove(index);
+                }
+                break;
+            case "order":
+                List<Object> orderParams = new ArrayList<>(queryTemplate.getParams());
+                int i = order;
+                while (matcher.find()) {
+                    query = query.replaceFirst(pattern, String.valueOf(orderParams.get(i % orderParams.size())));
+                    i++;
                 }
                 break;
             default:

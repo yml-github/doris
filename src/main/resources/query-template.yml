@@ -15,29 +15,29 @@ templates:
   - name: 点查3：低基数1
     query: severity == ${severity}
     order: collectorReceiptTime desc
-    paramType: range
+    paramType: order
     aggs:
       - Count
       - TopN
       - DateHistogram
     params:
       - 1
-#      - 3
-#      - 6
+      - 3
+      - 6
 
   - name: 点查3：低基数2
     query: direction == "${direction}"
     order: collectorReceiptTime desc
-    paramType: range
+    paramType: order
     aggs:
       - Count
       - TopN
       - DateHistogram
     params:
-#      - 00
-      - 01
-#      - 10
-#      - 11
+      - "00"
+      - "01"
+      - "10"
+      - "11"
 
   - name: 多条件：AND
     query: srcAddress == "${srcAddress}" AND destAddress == "${destAddress}"
@@ -69,18 +69,20 @@ templates:
   - name: 范围查询1
     query: bytesIn > ${bytesIn}
     order: collectorReceiptTime desc
-    paramType: range
+    paramType: order
     aggs:
       - Count
       - TopN
       - DateHistogram
     params:
       - 1000
-#      - 3000
-#      - 5000
+      - 2000
+      - 3000
+      - 4000
+      - 5000
 
   - name: 范围查询2
-    query: srcPort < ${srcPort}
+    query: srcPort <= ${srcPort}
     order: collectorReceiptTime desc
     paramType: dynamic
     aggs:
@@ -91,16 +93,16 @@ templates:
   - name: IN查询
     query: appProtocol in ["${appProtocol}", "${appProtocol}", "${appProtocol}"]
     order: collectorReceiptTime desc
-    paramType: range
+    paramType: order
     params:
       - http
       - https
       - sftp
-#      - echo
-#      - ssh
-#      - pop3
-#      - dns
-#      - ntp
+      - echo
+      - ssh
+      - pop3
+      - dns
+      - ntp
     aggs:
       - Count
       - TopN
