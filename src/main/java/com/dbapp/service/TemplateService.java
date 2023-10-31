@@ -23,10 +23,12 @@ import java.util.stream.Collectors;
 public class TemplateService {
     private static final String AGG_TEMPLATE_FILE = "aggs.yml";
     private static final String QUERY_TEMPLATE_FILE = "query-template.yml";
+    private static final String JOIN_TEMPLATE_FILE = "join-template.yml";
     private static final String DORIS_JOIN_TEMPLATE_SQL = "doris-join-template.sql";
     private static final String CK_JOIN_TEMPLATE_SQL = "ck-join-template.sql";
 
     private QueryTemplates queryTemplates;
+    private QueryTemplates joinTemplates;
     private String dorisJoinTemplate;
     private String ckJoinTemplate;
 
@@ -38,6 +40,8 @@ public class TemplateService {
         try {
             log.info("开始载入查询及聚合模板");
             queryTemplates = yaml.loadAs(new FileInputStream(path + QUERY_TEMPLATE_FILE), QueryTemplates.class);
+
+            joinTemplates = yaml.loadAs(new FileInputStream(path + JOIN_TEMPLATE_FILE), QueryTemplates.class);
 
             AggTemplates aggTemplates = yaml.loadAs(new FileInputStream(path + AGG_TEMPLATE_FILE), AggTemplates.class);
 
@@ -77,7 +81,8 @@ public class TemplateService {
                 log.error("doris join模板加载异常", e);
             }
 
-            log.info("模板载入完成，查询模板：{}，聚合模板：{}", queryTemplates.getTemplates().size(), aggs.size());
+            log.info("模板载入完成，查询模板：{}，聚合模板：{}, join模板：{}", queryTemplates.getTemplates().size(),
+                    aggs.size(), joinTemplates.getTemplates().size());
             log.info("doris join模板：{}", dorisJoinTemplate);
             log.info("ck join模板：{}", ckJoinTemplate);
         } catch (FileNotFoundException e) {
@@ -87,6 +92,10 @@ public class TemplateService {
 
     public QueryTemplates getQueryTemplates() {
         return queryTemplates;
+    }
+
+    public QueryTemplates getJoinTemplates() {
+        return joinTemplates;
     }
 
     public String getDorisJoinTemplateSql() {

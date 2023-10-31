@@ -1,5 +1,6 @@
 package com.dbapp.controller;
 
+import com.dbapp.config.PTConstant;
 import com.dbapp.service.CkService;
 import com.dbapp.service.DorisService;
 import com.dbapp.service.EsService;
@@ -39,9 +40,23 @@ public class PTController {
 
     @PostMapping("/all/join/{count}")
     public String startAllJoinPT(@PathVariable int count) {
-        Thread dorisThread = new Thread(() -> dorisService.startPT(count), "doris-pt");
+        Thread dorisThread = new Thread(() -> dorisService.startPT(count, PTConstant.JOIN), "doris-join-pt");
         dorisThread.start();
-        Thread esThread = new Thread(() -> ckService.startPT(count), "ck-pt");
+        Thread esThread = new Thread(() -> ckService.startPT(count), "ck-join-pt");
+        esThread.start();
+        return "started";
+    }
+
+    @PostMapping("/doris/join/{count}")
+    public String startDorisJoinPT(@PathVariable int count) {
+        Thread esThread = new Thread(() -> dorisService.startPT(count, PTConstant.JOIN), "doris-join-pt");
+        esThread.start();
+        return "started";
+    }
+
+    @PostMapping("/ck/join/{count}")
+    public String startCkJoinPT(@PathVariable int count) {
+        Thread esThread = new Thread(() -> ckService.startPT(count), "ck-join-pt");
         esThread.start();
         return "started";
     }

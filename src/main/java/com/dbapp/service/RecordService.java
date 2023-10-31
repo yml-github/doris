@@ -27,7 +27,7 @@ import java.util.*;
 public class RecordService {
 
     public void record(List<PTResult> ptResults, String type) {
-        String fileName = "/Users/yangmenglong/Downloads/" + type + "-" + FastDateFormat.getInstance("yyyyMMddHHmmss").format(System.currentTimeMillis()) + ".log";
+        String fileName = "D:\\Develop\\QueryPT\\report\\" + type + "-" + FastDateFormat.getInstance("yyyyMMddHHmmss").format(System.currentTimeMillis()) + ".log";
         FileUtil.writeLines(ptResults, fileName, StandardCharsets.UTF_8);
     }
 
@@ -112,7 +112,7 @@ public class RecordService {
 
         }
 
-        String fileName = "/Users/yangmenglong/Downloads/" + type + "-" + FastDateFormat.getInstance("yyyyMMddHHmmss").format(System.currentTimeMillis()) + ".xlsx";
+        String fileName = "D:\\Develop\\QueryPT\\report\\" + type + "-" + FastDateFormat.getInstance("yyyyMMddHHmmss").format(System.currentTimeMillis()) + ".xlsx";
         try {
             FileOutputStream outputStream = new FileOutputStream(fileName);
             workbook.write(outputStream);

@@ -1,129 +1,131 @@
 SELECT
-    windowId,
-    aggCondition,
-    _netId as netId,
-    _eventId as eventId,
-    _startTime as startTime,
-    _endTime as endTime,
-    _endTime >= CURDATE() as isCurrentDay,
-    _srcAddress as srcAddress,
-    _destAddress as destAddress,
-    _srcOrgId as srcOrgId,
-    _destOrgId as destOrgId,
-    _subCategory as subCategory,
-    _alarmName as alarmName,
-    ifnull(_threatName, _alarmName) AS threatName,
-    if(_threatSeverity is null, 'Low', _threatSeverity) as threatSeverity,
-    _alarmResults as alarmResults,
-    _modelName as modelName,
-    if(_alarmStatus is null, 'unprocessed', _alarmStatus) as alarmStatus,
-    eventCount,
-    srcAddressCount,
-    destAddressCount,
-    subCategoryCount,
-    alarmResultsCount,
-    _baasPlatformId as baas_platform_id,
-    _baasAlarmUuid as baasAlarmUuid
-FROM
+    final_result.windowId,
+    final_result.aggCondition,
+    final_result._netId as netId,
+    final_result._eventId as eventId,
+    final_result._startTime as startTime,
+    final_result._endTime as endTime,
+    final_result._endTime >= CURDATE() as isCurrentDay,
+    final_result._srcAddress as srcAddress,
+    final_result._destAddress as destAddress,
+    final_result._srcOrgId as srcOrgId,
+    final_result._destOrgId as destOrgId,
+    final_result._subCategory as subCategory,
+    final_result._alarmName as alarmName,
+    ifnull(final_result._threatName, final_result._alarmName) AS threatName,
+    if(final_result._threatSeverity is null,
+    ['Low'],
+    final_result._threatSeverity) as threatSeverity,
+    final_result._alarmResults as alarmResults,
+    final_result._modelName as modelName,
+    if(final_result._alarmStatus is null,
+    'unprocessed',
+    final_result._alarmStatus) as alarmStatus,
+    final_result.eventCount,
+    final_result.srcAddressCount,
+    final_result.destAddressCount,
+    final_result.subCategoryCount,
+    final_result.alarmResultsCount,
+    final_result._baasAlarmUuid as baasAlarmUuid
+ FROM
     (
     SELECT
-    windowId,
-    aggCondition,
-    any_value(minEventId) as _eventId,
-    any_value(minEndTime) as _startTime,
-    any_value(maxEndTime) as _endTime,
-    any_value(alarmStatus) as _alarmStatus,
+    topn_tmp.windowId,
+    topn_tmp.aggCondition,
+    any_value(topn_tmp.minEventId) as _eventId,
+    any_value(topn_tmp.minEndTime) as _startTime,
+    any_value(topn_tmp.maxEndTime) as _endTime,
+    any_value(topn_tmp.alarmStatus) as _alarmStatus,
     count(1) as eventCount,
-    any_value(modelName) as _modelName,
-    any_value(srcOrgId) as _srcOrgId,
-    any_value(destOrgId) as _destOrgId,
-    any_value(baas_platform_id) as _baasPlatformId,
-    any_value(baasAlarmUuid) as _baasAlarmUuid,
-    topn(1, threatName) AS _threatName,
-    count(distinct threatName) AS _threatNameCount,
-    topn(1, alarmName) as _alarmName,
-    count(distinct alarmName) as _alarmNameCount,
-    topn(1, srcAddress) as _srcAddress,
-    count(distinct srcAddress) as srcAddressCount,
-    topn(1, destAddress) as _destAddress,
-    count(distinct destAddress) as destAddressCount,
-    topn(1, subCategory) as _subCategory,
-    count(distinct subCategory) as subCategoryCount,
-    collect_set(threatSeverity) as _threatSeverity,
-    topn(1, alarmResults) as _alarmResults,
-    count(distinct alarmResults) as alarmResultsCount,
-    collect_set(netId) as _netId
+    any_value(topn_tmp.modelName) as _modelName,
+    any_value(topn_tmp.srcOrgId) as _srcOrgId,
+    any_value(topn_tmp.destOrgId) as _destOrgId,
+    any_value(topn_tmp.baasAlarmUuid) as _baasAlarmUuid,
+    topn(topn_tmp.threatName, 1) AS _threatName,
+    count(distinct topn_tmp.threatName) AS _threatNameCount,
+    topn(topn_tmp.alarmName, 1) as _alarmName,
+    count(distinct topn_tmp.alarmName) as _alarmNameCount,
+    topn(topn_tmp.srcAddress, 1) as _srcAddress,
+    count(distinct topn_tmp.srcAddress) as srcAddressCount,
+    topn(topn_tmp.destAddress, 1) as _destAddress,
+    count(distinct topn_tmp.destAddress) as destAddressCount,
+    topn(topn_tmp.subCategory, 1) as _subCategory,
+    count(distinct topn_tmp.subCategory) as subCategoryCount,
+    collect_set(topn_tmp.threatSeverity) as _threatSeverity,
+    topn(topn_tmp.alarmResults, 1) as _alarmResults,
+    count(distinct topn_tmp.alarmResults) as alarmResultsCount,
+    collect_set(topn_tmp.netId) as _netId
     FROM
     (
     SELECT
-    windowId,
-    aggCondition,
-    startTime,
-    endTime,
-    eventId,
-    baas_platform_id,
-    baasAlarmUuid,
-    alarmStatus,
-    modelName,
-    srcOrgId,
-    destOrgId,
-    alarmName,
-    maxEndTime,
-    minEndTime,
-    minEventId,
-    threatName,
-    srcAddress,
-    destAddress,
-    subCategory,
-    threatSeverity,
-    netId,
-    alarmResults
+    asa.windowId,
+    asa.aggCondition,
+    asa.startTime,
+    asa.endTime,
+    asa.eventId,
+    asa.baas_platform_id,
+    asa.baasAlarmUuid,
+    alarm_tmp.alarmStatus,
+    asa.modelName,
+    asa.srcOrgId,
+    asa.destOrgId,
+    asa.alarmName,
+    alarm_tmp.maxEndTime,
+    alarm_tmp.minEndTime,
+    alarm_tmp.minEventId,
+    asa.threatName,
+    asa.srcAddress,
+    asa.destAddress,
+    asa.subCategory,
+    asa.threatSeverity,
+    asa.netId,
+    asa.alarmResults
     FROM
-    ailpha_security_alarm AS semi
-    left join (
+    ailpha_security_alarm AS asa
+    LEFT JOIN (
     SELECT
-    windowId,
-    aggCondition,
-    maxEndTime,
-    minEventId,
-    minEndTime,
-    _alarmStatus as alarmStatus
+    aa.windowId,
+    aa.aggCondition,
+    aa.maxEndTime,
+    aa.minEventId,
+    aa.minEndTime,
+    aa._alarmStatus as alarmStatus
     FROM
     (
     SELECT
-    windowId,
-    aggCondition,
-    max(endTime) AS maxEndTime,
-    min(endTime) AS minEndTime,
-    min(eventId) AS minEventId,
-    any_value(alarmStatus) as _alarmStatus
+    asa.windowId,
+    asa.aggCondition,
+    max(asa.endTime) AS maxEndTime,
+    min(asa.endTime) AS minEndTime,
+    min(asa.eventId) AS minEventId,
+    any(handle_final.alarmStatus) as _alarmStatus
     FROM
-    ailpha_security_alarm alarm_top
-    left join (
+    ailpha_security_alarm asa
+    LEFT JOIN (
     SELECT
     windowId,
     aggCondition,
     alarmStatus
     FROM
-    securityAlarm.ailpha_security_merge_alarm_handle final ) handle_final on
-    alarm_top.windowId = handle_final.windowId
-    and alarm_top.aggCondition = handle_final.aggCondition
+    ailpha_security_merge_alarm_handle fh
+    ) handle_final
+    ON asa.windowId = handle_final.windowId and asa.aggCondition = handle_final.aggCondition
     WHERE ${whereCondition}
     GROUP BY
-    windowId,
-    aggCondition
+    asa.windowId,
+    asa.aggCondition
     ORDER BY
-    maxEndTime DESC
-    LIMIT 10) alarm_tmp
+    max(endTime) DESC
+    LIMIT 0,
+    10 ) AS aa ) alarm_tmp
     on
-    semi.windowId = alarm_tmp.windowId
-    AND semi.aggCondition = alarm_tmp.aggCondition
-    WHERE ${whereCondition} )
-    GROUP BY
-    windowId,
-    aggCondition )
-    ORDER BY
-    endTime desc,
-    windowId desc,
-    aggCondition desc
-    )
+    asa.windowId = alarm_tmp.windowId
+    and asa.aggCondition = alarm_tmp.aggCondition
+    WHERE ${whereCondition}
+    ) topn_tmp
+    GROUP BY topn_tmp.windowId, topn_tmp.aggCondition
+    ) final_result
+ ORDER BY
+    final_result._endTime desc,
+    final_result.windowId desc,
+    final_result.aggCondition desc

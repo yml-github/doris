@@ -48,12 +48,15 @@ public class CkService {
     @Value("${doris.endTime}")
     private String endTime;
 
+    @Value("${clickhouse.join.alias}")
+    private String alias;
+
     public boolean startPT(int count) {
         log.info("开始执行ck join查询测试，总轮询次数：{}", count);
 
         JSONObject dic = DicLoader.getDic();
 
-        QueryTemplates queryTemplates = templateService.getQueryTemplates();
+        QueryTemplates queryTemplates = templateService.getJoinTemplates();
         List<QueryTemplate> templates = queryTemplates.getTemplates();
         List<PTResult> ptResults = new ArrayList<>();
         try (Connection connection = connect()) {
@@ -92,9 +95,8 @@ public class CkService {
     }
 
     private String completeSQL(String whereSQL) {
-        whereSQL = "(endTime >= \"" + startTime + "\" AND endTime <= \"" + endTime + "\") AND (" + whereSQL + ")";
         String joinSql = templateService.getCkJoinTemplateSql();
-        return joinSql.replace("${whereCondition}", whereSQL);
+        return joinSql.replace("${whereCondition}", whereSQL).replace("alias.", alias);
     }
 
     private PTResult executeSQL(String sql, String name, int currentCount, Connection connection) {

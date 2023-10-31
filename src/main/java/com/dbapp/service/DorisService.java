@@ -54,9 +54,6 @@ public class DorisService {
     @Value("${doris.select.fields}")
     private String selectFields;
 
-    @Value("${doris.update.table}")
-    private String updateTable;
-
     @Autowired
     private TemplateService templateService;
 
@@ -71,6 +68,9 @@ public class DorisService {
 
     @Resource(name = "doris")
     private ExecutorService executor;
+
+    @Value("${doris.join.alias}")
+    private String alias;
 
     public boolean startMTPT(int threadCount) {
         return startMTPT(threadCount, PTConstant.QUERY);
@@ -176,7 +176,13 @@ public class DorisService {
 
         try {
             List<PTResult> ptResults = new ArrayList<>();
-            QueryTemplates queryTemplates = templateService.getQueryTemplates();
+            QueryTemplates queryTemplates;
+            if (ptConstant == PTConstant.QUERY) {
+                queryTemplates = templateService.getQueryTemplates();
+            } else {
+                queryTemplates = templateService.getJoinTemplates();
+            }
+
             List<QueryTemplate> templates = queryTemplates.getTemplates();
 
             for (int i = 1; i <= count; i++) {
@@ -263,11 +269,10 @@ public class DorisService {
 
     private String completeSQL(String whereSQL, int size, String order, PTConstant ptConstant) {
         StringBuilder sql = new StringBuilder();
-        String timeField = ptConstant == PTConstant.QUERY ? "collectorReceiptTime" : "endTime";
-        whereSQL = "(" + timeField + " >= \"" + startTime + "\" AND " + timeField + " <= \"" + endTime + "\") AND (" + whereSQL + ")";
 
         switch (ptConstant) {
             case QUERY:
+                whereSQL = "(collectorReceiptTime >= \"" + startTime + "\" AND collectorReceiptTime <= \"" + endTime + "\") AND (" + whereSQL + ")";
                 sql.append("select ").append(selectFields).append(" from ").append(table).append(" PARTITION(").append(partition).append(") where ").append(whereSQL);
                 if (StringUtils.isNotBlank(order)) {
                     sql.append(" ORDER BY ").append(order);
@@ -275,11 +280,11 @@ public class DorisService {
                 sql.append(" limit ").append(size);
                 return sql.toString();
             case UPDATE:
-                sql.append("update ").append(table).append( "PARTITION(").append(partition).append(") set status = '未处置' where ").append(whereSQL);
+                sql.append("update ").append(table).append(" PARTITION(").append(partition).append(") set status = 'unprocessed' where ").append(whereSQL);
                 return sql.toString();
             case JOIN:
                 String joinSql = templateService.getDorisJoinTemplateSql();
-                return joinSql.replace("${whereCondition}", whereSQL);
+                return joinSql.replace("${whereCondition}", whereSQL).replace("alias.", alias);
         }
 
         sql.append("select ").append(selectFields).append(" from ").append(table).append(" PARTITION(").append(partition).append(") where ").append(whereSQL);
@@ -340,11 +345,11 @@ public class DorisService {
             examples = jdbcTemplate.queryForList(randomSQL);
             log.info("总数据量：{}, 获取样例数据：{}条", total, examples.size());
         } else {
-            String randomSQL = "select " + selectFields + " from " + updateTable + " LIMIT 50";
+            String randomSQL = "select " + selectFields + " from ailpha_security_alarm LIMIT 50";
             log.info("Doris随机取数据SQL：{}", randomSQL);
             log.info("Doris展示列：{}", selectFields);
             examples = jdbcTemplate.queryForList(randomSQL);
-            log.info("Table: {}, 获取样例数据：{}条", updateTable, examples.size());
+            log.info("获取样例数据：{}条", examples.size());
         }
 
         localDataService.recordDorisExampleData(examples, currentCount, totalCount);

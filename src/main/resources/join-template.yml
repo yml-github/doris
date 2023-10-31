@@ -1,0 +1,69 @@
+templates:
+  - name: 点查1：根据ID溯源
+    query: alias.eventId == "${eventId}"
+    paramType: dynamic
+
+  - name: 点查2：高基数
+    query: alias.srcAddress == "${srcAddress}"
+    paramType: dynamic
+
+#  - name: 点查3：低基数1
+#    query: alias.severity == ${severity}
+#    paramType: order
+#    params:
+#      - 1
+#      - 3
+#      - 6
+
+  - name: 点查3：低基数2
+    query: alias.direction == "${direction}"
+    paramType: order
+    params:
+      - "00"
+      - "01"
+      - "10"
+      - "11"
+
+  - name: 多条件：AND
+    query: alias.srcAddress == "${srcAddress}" AND alias.destAddress == "${destAddress}"
+    paramType: dynamic
+
+  - name: 多条件：OR
+    query: alias.srcAddress == "${srcAddress}" OR alias.destAddress == "${destAddress}"
+    paramType: dynamic
+
+  - name: 排除场景
+    query: alias.srcAddress != "${srcAddress}" AND alias.destAddress != "${destAddress}"
+    paramType: dynamic
+
+  - name: 范围查询1
+    query: alias.bytesIn > ${bytesIn}
+    paramType: order
+    params:
+      - 1000
+      - 2000
+      - 3000
+      - 4000
+      - 5000
+
+  - name: 范围查询2
+    query: alias.srcPort <= ${srcPort}
+    paramType: dynamic
+
+  - name: IN查询
+    query: alias.appProtocol in ["${appProtocol}", "${appProtocol}", "${appProtocol}"]
+    paramType: order
+    params:
+      - http
+      - https
+      - sftp
+      - echo
+      - ssh
+      - pop3
+      - dns
+      - ntp
+
+  - name: 单次500条详情查询
+    query: alias.srcAddress == "${srcAddress}"
+    size: 500
+    paramType: dynamic
