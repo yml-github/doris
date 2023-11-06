@@ -1,6 +1,7 @@
 package com.dbapp.service;
 
 import com.alibaba.fastjson.JSONObject;
+import com.dbapp.config.PTConstant;
 import com.dbapp.dic.DicLoader;
 import com.dbapp.result.PTResult;
 import com.dbapp.templates.QueryTemplate;
@@ -85,8 +86,8 @@ public class CkService {
 
             log.info("ck join查询测试结束，结果：{}", ptResults);
 
-            recordService.record(ptResults, "ck");
-            recordService.recordExcel(ptResults, "ck", count);
+            recordService.record(ptResults, "ck", PTConstant.JOIN);
+            recordService.recordExcel(ptResults, "ck", count, PTConstant.JOIN);
         } catch (Exception e) {
             log.error("ck join查询执行失败", e);
             return false;

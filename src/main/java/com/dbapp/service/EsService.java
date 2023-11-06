@@ -3,6 +3,7 @@ package com.dbapp.service;
 import com.alibaba.fastjson.JSONObject;
 import com.dbapp.client.EsClient;
 import com.dbapp.config.EsConfig;
+import com.dbapp.config.PTConstant;
 import com.dbapp.dic.DicLoader;
 import com.dbapp.exception.BaasELException;
 import com.dbapp.result.PTResult;
@@ -147,8 +148,8 @@ public class EsService {
 
             log.info("es查询测试结束，结果：{}", ptResults);
 
-            recordService.record(ptResults, "es");
-            recordService.recordExcel(ptResults, "es", threadCount);
+            recordService.record(ptResults, "es", PTConstant.QUERY);
+            recordService.recordExcel(ptResults, "es", threadCount, PTConstant.QUERY);
         } catch (Exception e) {
             log.error("es查询执行失败", e);
             return false;
@@ -201,8 +202,8 @@ public class EsService {
 
             log.info("es查询测试结束，结果：{}", ptResults);
 
-            recordService.record(ptResults, "es");
-            recordService.recordExcel(ptResults, "es", count);
+            recordService.record(ptResults, "es", PTConstant.QUERY);
+            recordService.recordExcel(ptResults, "es", count, PTConstant.QUERY);
         } catch (Exception e) {
             log.error("es查询执行失败", e);
             return false;

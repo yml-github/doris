@@ -154,8 +154,8 @@ public class DorisService {
 
             log.info("doris并发查询测试结束，结果：{}", ptResults);
 
-            recordService.record(ptResults, "doris");
-            recordService.recordExcel(ptResults, "doris", threadCount);
+            recordService.record(ptResults, "doris", ptConstant);
+            recordService.recordExcel(ptResults, "doris", threadCount, ptConstant);
         } catch (IOException e) {
             log.error("Doris查询执行异常", e);
         }
@@ -226,8 +226,8 @@ public class DorisService {
 
             log.info("doris查询测试结束，结果：{}", ptResults);
 
-            recordService.record(ptResults, "doris");
-            recordService.recordExcel(ptResults, "doris", count);
+            recordService.record(ptResults, "doris", ptConstant);
+            recordService.recordExcel(ptResults, "doris", count, ptConstant);
         } catch (BaasMonitorException | IOException e) {
             log.error("Doris查询执行异常", e);
             return false;

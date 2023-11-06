@@ -1,6 +1,7 @@
 package com.dbapp.service;
 
 import cn.hutool.core.io.FileUtil;
+import com.dbapp.config.PTConstant;
 import com.dbapp.result.PTResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.core.util.datetime.FastDateFormat;
@@ -26,12 +27,12 @@ import java.util.*;
 @Slf4j
 public class RecordService {
 
-    public void record(List<PTResult> ptResults, String type) {
-        String fileName = "D:\\Develop\\QueryPT\\report\\" + type + "-" + FastDateFormat.getInstance("yyyyMMddHHmmss").format(System.currentTimeMillis()) + ".log";
+    public void record(List<PTResult> ptResults, String type, PTConstant ptConstant) {
+        String fileName = "D:\\Develop\\QueryPT\\report\\" + type + "-" + ptConstant.name().toLowerCase() + "-" + FastDateFormat.getInstance("yyyyMMddHHmmss").format(System.currentTimeMillis()) + ".log";
         FileUtil.writeLines(ptResults, fileName, StandardCharsets.UTF_8);
     }
 
-    public void recordExcel(List<PTResult> ptResults, String type, int count) {
+    public void recordExcel(List<PTResult> ptResults, String type, int count, PTConstant ptConstant) {
         // 创建新的Excel工作簿
         Workbook workbook = new XSSFWorkbook();
         // 创建新的工作表
@@ -112,7 +113,7 @@ public class RecordService {
 
         }
 
-        String fileName = "D:\\Develop\\QueryPT\\report\\" + type + "-" + FastDateFormat.getInstance("yyyyMMddHHmmss").format(System.currentTimeMillis()) + ".xlsx";
+        String fileName = "D:\\Develop\\QueryPT\\report\\" + type + "-" + ptConstant.name().toLowerCase() + "-" + FastDateFormat.getInstance("yyyyMMddHHmmss").format(System.currentTimeMillis()) + ".xlsx";
         try {
             FileOutputStream outputStream = new FileOutputStream(fileName);
             workbook.write(outputStream);

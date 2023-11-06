@@ -54,6 +54,13 @@ public class PTController {
         return "started";
     }
 
+    @PostMapping("/doris/update/{count}")
+    public String startDorisUpdatePT(@PathVariable int count) {
+        Thread esThread = new Thread(() -> dorisService.startPT(count, PTConstant.UPDATE), "doris-update-pt");
+        esThread.start();
+        return "started";
+    }
+
     @PostMapping("/ck/join/{count}")
     public String startCkJoinPT(@PathVariable int count) {
         Thread esThread = new Thread(() -> ckService.startPT(count), "ck-join-pt");
